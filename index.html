@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combate Aéreo Neón - Sky Hunter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000000;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: default;
+        }
+
+        /* Botón de Inicio Centrado */
+        #btn-inicio {
+            padding: 18px 45px;
+            font-size: 1.6rem;
+            color: #ffffff;
+            background: transparent;
+            border: 2px solid #00f0ff;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.4);
+            z-index: 10;
+        }
+
+        #btn-inicio:hover {
+            background-color: #00f0ff;
+            color: #000000;
+            box-shadow: 0 0 35px rgba(0, 240, 255, 0.9);
+            transform: scale(1.08);
+        }
+
+        /* Controles Flotantes Superior Derecha */
+        .controles {
+            display: none;
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            gap: 12px;
+            z-index: 20;
+        }
+
+        .btn-control {
+            padding: 10px 22px;
+            font-size: 0.95rem;
+            color: #ffffff;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(0, 240, 255, 0.5);
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-control:hover {
+            background: #00f0ff;
+            color: #000000;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+        }
+
+        #btn-salir:hover {
+            background: rgba(255, 0, 85, 0.9);
+            border-color: #ff0055;
+            color: #ffffff;
+            box-shadow: 0 0 15px rgba(255, 0, 85, 0.8);
+        }
+
+        /* Contenedor del Lienzo */
+        #canvas-container {
+            display: none;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- CAMBIA AQUÍ LA RUTA A TU ARCHIVO DE AUDIO -->
+    <audio id="miMusica" src="musica45.mp3" preload="auto" loop></audio>
+
+    <!-- Botón de Inicio -->
+    <button id="btn-inicio">Inicio</button>
+
+    <!-- Controles flotantes -->
+    <div class="controles" id="panel-controles">
+        <button class="btn-control" id="btn-audio">🔊 Sonido: ON</button>
+        <button class="btn-control" id="btn-salir">Salir</button>
+    </div>
+
+    <!-- Contenedor del lienzo -->
+    <div id="canvas-container">
+        <canvas id="airCombatCanvas"></canvas>
+    </div>
+
+    <script>
+        const btnInicio = document.getElementById('btn-inicio');
+        const btnSalir = document.getElementById('btn-salir');
+        const btnAudio = document.getElementById('btn-audio');
+        const panelControles = document.getElementById('panel-controles');
+        const canvasContainer = document.getElementById('canvas-container');
+        const canvas = document.getElementById('airCombatCanvas');
+        const ctx = canvas.getContext('2d');
+        const audioElement = document.getElementById('miMusica');
+
+        let animacionId = null;
+        let activo = false;
+        let tiempoInicio = 0;
+
+        // Puntero y Avión del jugador
+        let mouseX = 0;
+        let mouseY = 0;
+        let avionX = 0;
+        let avionY = 0;
+        let anguloAvion = 0;
+
+        // Elementos de juego
+        let disparos = [];
+        let cazasEnemigos = [];
+        let nubesNeon = [];
+        let anillosPotenciadores = [];
+        let particulas = [];
+        let estelaTurbina = [];
+
+        // Sistema de vuelo y puntuación
+        let puntuacion = 0;
+        let temblor = 0;
+        let ultimoDisparo = 0;
+
+        const MAX_ENEMIGOS = 5;
+        const MAX_ANILLOS = 3;
+
+        function ajustarCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', () => {
+            if (activo) ajustarCanvas();
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (activo) {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            }
+        });
+
+        window.addEventListener('touchmove', (e) => {
+            if (activo && e.touches.length > 0) {
+                mouseX = e.touches[0].clientX;
+                mouseY = e.touches[0].clientY;
+            }
+        });
+
+        function dispararProyectil() {
+            const vel = 18;
+            disparos.push({
+                x: avionX + Math.cos(anguloAvion) * 25,
+                y: avionY + Math.sin(anguloAvion) * 25,
+                vx: Math.cos(anguloAvion) * vel,
+                vy: Math.sin(anguloAvion) * vel,
+                hue: 180
+            });
+        }
+
+        window.addEventListener('click', (e) => {
+            if (activo && e.target.tagName !== 'BUTTON') {
+                dispararProyectil();
+            }
+        });
+
+        window.addEventListener('touchstart', (e) => {
+            if (activo && e.target.tagName !== 'BUTTON') {
+                if (e.touches.length > 0) {
+                    mouseX = e.touches[0].clientX;
+                    mouseY = e.touches[0].clientY;
+                }
+                dispararProyectil();
+            }
+        });
+
+        btnAudio.addEventListener('click', (e) => {
+            e.stopPropagation();
+            audioElement.muted = !audioElement.muted;
+            btnAudio.textContent = audioElement.muted ? "🔇 Sonido: OFF" : "🔊 Sonido: ON";
+        });
+
+        btnInicio.addEventListener('click', () => {
+            btnInicio.style.display = 'none';
+            panelControles.style.display = 'flex';
+            canvasContainer.style.display = 'block';
+
+            ajustarCanvas();
+            inicializarJuego();
+            activo = true;
+
+            audioElement.currentTime = 0;
+            audioElement.muted = false;
+            btnAudio.textContent = "🔊 Sonido: ON";
+            audioElement.play().catch(err => console.log(err));
+
+            iniciarAnimacion();
+        });
+
+        btnSalir.addEventListener('click', (e) => {
+            e.stopPropagation();
+            activo = false;
+            if (animacionId) cancelAnimationFrame(animacionId);
+
+            audioElement.pause();
+            audioElement.currentTime = 0;
+
+            canvasContainer.style.display = 'none';
+            panelControles.style.display = 'none';
+            btnInicio.style.display = 'block';
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        function inicializarJuego() {
+            tiempoInicio = Date.now();
+            avionX = canvas.width / 2;
+            avionY = canvas.height * 0.7;
+            mouseX = canvas.width / 2;
+            mouseY = canvas.height / 2;
+
+            puntuacion = 0;
+            temblor = 0;
+            disparos = [];
+            particulas = [];
+            estelaTurbina = [];
+
+            // Generar nubes de fondo neón
+            nubesNeon = [];
+            for (let i = 0; i < 15; i++) {
+                nubesNeon.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    vy: 0.5 + Math.random() * 1.5,
+                    radio: 40 + Math.random() * 60,
+                    hue: (Math.random() > 0.5) ? 280 : 200
+                });
+            }
+
+            cazasEnemigos = [];
+            for (let i = 0; i < MAX_ENEMIGOS; i++) {
+                crearCazaEnemigo();
+            }
+
+            anillosPotenciadores = [];
+            for (let i = 0; i < MAX_ANILLOS; i++) {
+                crearAnilloPotenciador();
+            }
+        }
+
+        function crearCazaEnemigo() {
+            cazasEnemigos.push({
+                x: Math.random() * (canvas.width - 100) + 50,
+                y: -60 - Math.random() * 200,
+                vx: (Math.random() - 0.5) * 2.5,
+                vy: 2 + Math.random() * 2.5,
+                hue: 0, // Rojo Neón
+                ancho: 36,
+                alto: 42
+            });
+        }
+
+        function crearAnilloPotenciador() {
+            anillosPotenciadores.push({
+                x: Math.random() * (canvas.width - 120) + 60,
+                y: -80 - Math.random() * 300,
+                vy: 1.8 + Math.random() * 1.5,
+                radio: 22,
+                hue: 120 // Verde Lima Neón
+            });
+        }
+
+        function generarExplosionParticulas(x, y, hue, cantidad = 25) {
+            for (let i = 0; i < cantidad; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const vel = 2 + Math.random() * 7;
+                particulas.push({
+                    x: x,
+                    y: y,
+                    vx: Math.cos(ang) * vel,
+                    vy: Math.sin(ang) * vel,
+                    vida: 1.0,
+                    hue: hue,
+                    tam: Math.random() * 3.5 + 1.5
+                });
+            }
+        }
+
+        function iniciarAnimacion() {
+            if (!activo) return;
+
+            ctx.save();
+
+            // Sacudida de pantalla en colisiones o impactos
+            if (temblor > 0) {
+                const offsetX = (Math.random() - 0.5) * temblor;
+                const offsetY = (Math.random() - 0.5) * temblor;
+                ctx.translate(offsetX, offsetY);
+                temblor *= 0.85;
+                if (temblor < 0.5) temblor = 0;
+            }
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const t = (Date.now() - tiempoInicio) * 0.001;
+
+            // 1. NUBES DE FONDO EN VUELO VERTICAL
+            for (let i = 0; i < nubesNeon.length; i++) {
+                const n = nubesNeon[i];
+                n.y += n.vy;
+                if (n.y - n.radio > canvas.height) {
+                    n.y = -n.radio;
+                    n.x = Math.random() * canvas.width;
+                }
+
+                ctx.save();
+                ctx.fillStyle = `hsla(${n.hue}, 100%, 50%, 0.04)`;
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = `hsl(${n.hue}, 100%, 50%)`;
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, n.radio, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+
+            // 2. DISPAROS LÁSER DEL CAZA
+            for (let i = disparos.length - 1; i >= 0; i--) {
+                const d = disparos[i];
+                d.x += d.vx;
+                d.y += d.vy;
+
+                if (d.x < 0 || d.x > canvas.width || d.y < 0 || d.y > canvas.height) {
+                    disparos.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.strokeStyle = '#00f0ff';
+                ctx.lineWidth = 4;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#00f0ff';
+                ctx.beginPath();
+                ctx.moveTo(d.x, d.y);
+                ctx.lineTo(d.x - d.vx * 1.5, d.y - d.vy * 1.5);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 3. ANILLOS DE ENERGÍA Y TURBO (Puntos)
+            for (let i = anillosPotenciadores.length - 1; i >= 0; i--) {
+                const a = anillosPotenciadores[i];
+                a.y += a.vy;
+
+                if (a.y - a.radio > canvas.height) {
+                    anillosPotenciadores.splice(i, 1);
+                    crearAnilloPotenciador();
+                    continue;
+                }
+
+                // Detección de paso por el anillo
+                const distAvion = Math.hypot(avionX - a.x, avionY - a.y);
+                if (distAvion < a.radio + 20) {
+                    generarExplosionParticulas(a.x, a.y, a.hue, 20);
+                    puntuacion += 200;
+                    anillosPotenciadores.splice(i, 1);
+                    crearAnilloPotenciador();
+                    continue;
+                }
+
+                // Dibujar Anillo Neón
+                ctx.save();
+                ctx.strokeStyle = '#39ff14';
+                ctx.lineWidth = 4;
+                ctx.shadowBlur = 18;
+                ctx.shadowColor = '#39ff14';
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, a.radio, 0, Math.PI * 2);
+                ctx.stroke();
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, a.radio, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // 4. CAZAS ENEMIGOS EN PICADO
+            for (let i = cazasEnemigos.length - 1; i >= 0; i--) {
+                const e = cazasEnemigos[i];
+                e.x += e.vx;
+                e.y += e.vy;
+
+                // Rebote suave en lados
+                if (e.x - e.ancho / 2 < 20 || e.x + e.ancho / 2 > canvas.width - 20) {
+                    e.vx *= -1;
+                }
+
+                if (e.y - e.alto > canvas.height) {
+                    cazasEnemigos.splice(i, 1);
+                    crearCazaEnemigo();
+                    continue;
+                }
+
+                // Impacto de disparo láser en caza enemigo
+                let colisionDisparo = false;
+                for (let j = disparos.length - 1; j >= 0; j--) {
+                    const d = disparos[j];
+                    const distImpacto = Math.hypot(e.x - d.x, e.y - d.y);
+                    if (distImpacto < e.ancho / 2 + 10) {
+                        generarExplosionParticulas(e.x, e.y, e.hue, 30);
+                        puntuacion += 150;
+                        temblor = 10;
+                        disparos.splice(j, 1);
+                        colisionDisparo = true;
+                        break;
+                    }
+                }
+
+                if (colisionDisparo) {
+                    cazasEnemigos.splice(i, 1);
+                    crearCazaEnemigo();
+                    continue;
+                }
+
+                // Colisión directa con el Avión del jugador
+                const distAvionCol = Math.hypot(avionX - e.x, avionY - e.y);
+                if (distAvionCol < e.ancho / 2 + 20) {
+                    temblor = 16;
+                    puntuacion = Math.max(0, puntuacion - 100);
+                    generarExplosionParticulas(avionX, avionY, 0, 35);
+                    cazasEnemigos.splice(i, 1);
+                    crearCazaEnemigo();
+                    continue;
+                }
+
+                // Dibujar Caza Enemigo en Neón Rojo (Vista Superior)
+                ctx.save();
+                ctx.translate(e.x, e.y);
+
+                ctx.fillStyle = '#ff0055';
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.5;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ff0055';
+
+                // Alas invertidas de combate
+                ctx.beginPath();
+                ctx.moveTo(0, e.alto / 2);
+                ctx.lineTo(-e.ancho / 2, -e.alto / 3);
+                ctx.lineTo(-e.ancho / 4, -e.alto / 2);
+                ctx.lineTo(0, -e.alto / 4);
+                ctx.lineTo(e.ancho / 4, -e.alto / 2);
+                ctx.lineTo(e.ancho / 2, -e.alto / 3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                // Fuego de propulsión enemigo
+                ctx.fillStyle = '#ffaa00';
+                ctx.shadowColor = '#ffaa00';
+                ctx.fillRect(-4, -e.alto / 2 - 8, 8, 8);
+
+                ctx.restore();
+            }
+
+            // 5. PARTÍCULAS DE EXPLOSIÓN
+            ctx.save();
+            for (let i = particulas.length - 1; i >= 0; i--) {
+                const p = particulas[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vida -= 0.03;
+
+                if (p.vida <= 0) {
+                    particulas.splice(i, 1);
+                    continue;
+                }
+
+                ctx.globalAlpha = p.vida;
+                ctx.fillStyle = `hsl(${p.hue}, 100%, 65%)`;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = `hsl(${p.hue}, 100%, 50%)`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.tam, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
+
+            // 6. VOLUMEN Y SEGUIMIENTO DEL AVIÓN DEL JUGADOR (CAZA CIAN)
+            const dxAvion = mouseX - avionX;
+            const dyAvion = mouseY - avionY;
+            avionX += dxAvion * 0.12;
+            avionY += dyAvion * 0.12;
+
+            // Ángulo de inclinación del caza en giro
+            anguloAvion = Math.atan2(dyAvion, dxAvion);
+            const inclinacionAla = Math.max(-0.4, Math.min(0.4, dxAvion * 0.015));
+
+            // Estela de plasma de las turbinas
+            estelaTurbina.push({ x: avionX, y: avionY, alfa: 1.0 });
+            if (estelaTurbina.length > 18) estelaTurbina.shift();
+
+            for (let i = 0; i < estelaTurbina.length; i++) {
+                const est = estelaTurbina[i];
+                est.alfa -= 0.05;
+                if (est.alfa > 0) {
+                    ctx.save();
+                    ctx.globalAlpha = est.alfa;
+                    ctx.fillStyle = '#00f0ff';
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = '#00f0ff';
+                    ctx.beginPath();
+                    ctx.arc(est.x, est.y, (i / estelaTurbina.length) * 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+
+            // DIBUJAR CAZA DEL JUGADOR (Caza de Neón Futurista)
+            ctx.save();
+            ctx.translate(avionX, avionY);
+            ctx.rotate(anguloAvion + Math.PI / 2);
+            ctx.scale(1 - Math.abs(inclinacionAla) * 0.2, 1); // Efecto 3D al girar alas
+
+            // Sombra del Caza
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.beginPath();
+            ctx.ellipse(0, 15, 25, 8, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Fuselaje y Alas principales
+            ctx.fillStyle = '#00f0ff';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.shadowBlur = 22;
+            ctx.shadowColor = '#00f0ff';
+
+            ctx.beginPath();
+            ctx.moveTo(0, -32); // Morro del avión
+            ctx.lineTo(-6, -12);
+            ctx.lineTo(-28, 10); // Ala izquierda
+            ctx.lineTo(-8, 14);
+            ctx.lineTo(-12, 28); // Estabilizador izq
+            ctx.lineTo(0, 22);
+            ctx.lineTo(12, 28);  // Estabilizador der
+            ctx.lineTo(8, 14);
+            ctx.lineTo(28, 10);  // Ala derecha
+            ctx.lineTo(6, -12);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Cabina de mando brillante
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#ffffff';
+            ctx.beginPath();
+            ctx.ellipse(0, -6, 4, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+
+            // 7. MARCADOR HUD ARCADE PILOTO
+            ctx.save();
+            ctx.font = 'bold 22px "Segoe UI", sans-serif';
+            ctx.fillStyle = '#00f0ff';
+            ctx.textAlign = 'left';
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = '#00f0ff';
+            ctx.fillText(`PUNTOS COMBATE: ${puntuacion}`, 30, 45);
+            ctx.font = '14px "Segoe UI", sans-serif';
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText("DISPARO: CLIC / TOQUE EN PANTALLA", 30, 72);
+            ctx.restore();
+
+            ctx.restore();
+
+            animacionId = requestAnimationFrame(iniciarAnimacion);
+        }
+    </script>
+</body>
+</html>
